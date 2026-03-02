@@ -1,12 +1,11 @@
 import pytest
 from app.core.domain import Order, OrderStatus
 from app.core.application import OrderService
-from app.core.application.interfaces import OrderRepository
 from typing import Dict, Optional
 from uuid import UUID, uuid4
 
 
-class InMemoryOrderRepository(OrderRepository):
+class InMemoryOrderRepository:
     def __init__(self):
         self._storage: Dict[UUID, Order] = {}
 
