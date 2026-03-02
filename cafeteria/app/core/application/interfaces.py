@@ -1,14 +1,9 @@
-from typing import Optional
+from typing import Optional, Protocol
 from uuid import UUID
-from abc import ABC, abstractmethod
 from app.core.domain import Order
 
 
-class OrderRepository(ABC):
-    @abstractmethod
-    def save(self, order: Order) -> None:
-        pass
+class OrderRepository(Protocol):
+    def save(self, order: Order) -> None: ...
 
-    @abstractmethod
-    def get_by_id(self, order_id: UUID) -> Optional[Order]:
-        pass
+    def get_by_id(self, order_id: UUID) -> Optional[Order]: ...
