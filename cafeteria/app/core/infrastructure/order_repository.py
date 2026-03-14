@@ -16,7 +16,11 @@ class OrderModel(Base):
     item_name = Column(String, nullable=False)
     quantity = Column(Integer, nullable=False)
     price = Column(Float, nullable=False)
-    status = Column(SAEnum(OrderStatus), nullable=False, default=OrderStatus.CREATED)
+    status = Column(
+        SAEnum(OrderStatus, values_callable=lambda x: [e.value for e in x], name="orderstatus", create_type=False),
+        nullable=False,
+        default=OrderStatus.CREATED
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
