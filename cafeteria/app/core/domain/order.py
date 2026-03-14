@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 class OrderStatus(str, Enum):
     CREATED = "created"
     PENDING = "pending"
+    CONFIRMED = "confirmed"
     IN_PROGRESS = "in_progress"
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
