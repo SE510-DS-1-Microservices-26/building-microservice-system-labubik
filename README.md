@@ -184,5 +184,5 @@ docker compose start users-service
 
 ### Responsibility split
 
-- **Student Kseniia Hanziuk:** Core Service, Users Service, domain/application/infrastructure layers
-- **Student Sofiia Churikova:** Gateway service, docker-compose.yml (microservice setup), Dockerfile fixes, README
+- **Student Kseniia Hanziuk:** Core Service, Users Service, domain/application/infrastructure layers (PR https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/7)
+- **Student Sofiia Churikova:** Gateway service, docker-compose.yml (microservice setup), Dockerfile fixes, README (PR https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/8)
