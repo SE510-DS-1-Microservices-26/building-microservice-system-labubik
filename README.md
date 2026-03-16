@@ -95,5 +95,5 @@ pytest tests/ -v
 ## Team Workflow
 
 ### Role Split
-- **Student Sofiia Churikova**: domain layer, application layer, unit tests, README (PR #1 https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/1, PR #2 https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/2, PR #3 https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/3)
-- **Student Kseniia Hanziuk**: infrastructure, API, Docker, migrations, unit tests (PR #4 https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/4, PR #5 https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/5)
+- **Student Sofiia Churikova**: domain layer, application layer, unit tests, README (PR https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/1, PR https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/2, PR https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/3)
+- **Student Kseniia Hanziuk**: infrastructure, API, Docker, migrations, unit tests (PR https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/4, PR https://github.com/SE510-DS-1-Microservices-26/building-microservice-system-labubik/pull/5)
