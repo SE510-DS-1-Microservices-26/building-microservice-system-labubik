@@ -1,11 +1,11 @@
 services:
-  db:
+  core-db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: cafeteria
+      POSTGRES_DB: core_db
     ports:
       - "5432:5432"
     healthcheck:
@@ -13,17 +13,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  app:
-    build: .
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    environment:
-      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/cafeteria
-    depends_on:
-      db:
-        condition: service_healthy
 
   users-db:
     image: postgres:16-alpine
@@ -35,25 +24,59 @@ services:
     ports:
       - "5434:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 5
 
-  users-service:
+  core-service:
     build:
-      context: ./users_service
+      context: ./services/core_service
     restart: unless-stopped
     ports:
       - "8081:8080"
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@core-db:5432/core_db
+      USERS_BASE_URL: http://users-service:8080
+    depends_on:
+      core-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  users-service:
+    build:
+      context: ./services/users_service
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@users-db:5432/users_db
     depends_on:
       users-db:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\"" ]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 15s
+
+  gateway:
+    build:
+      context: ./services/gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      CORE_SERVICE_URL: http://core-service:8080
+      USERS_SERVICE_URL: http://users-service:8080
+    depends_on:
+      core-service:
+        condition: service_healthy
+      users-service:
+        condition: service_healthy
