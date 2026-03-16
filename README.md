@@ -175,15 +175,20 @@ curl -X PATCH http://localhost:8080/core/core-items/96c600fa-bc34-4d11-884a-4ca9
 docker compose stop users-service
 ```
 
-| Operation                        | Result                                        |
-|----------------------------------|-----------------------------------------------|
-| `POST /core/core-items`          | **503** — "Users service is unavailable"      |
-| `GET /core/core-items/{id}`      | **200** — works normally (no Users call needed)|
-| `PATCH /core/core-items/{id}/status` | **200** — works normally                  |
-| `GET /users/{id}`                | **503** — gateway cannot reach Users Service  |
-| `POST /users`                    | **503** — gateway cannot reach Users Service  |
+| Operation                            | Result                                          |
+|--------------------------------------|-------------------------------------------------|
+| `POST /core/core-items`              | **503** — "Users service is unavailable"        |
+| `GET /core/core-items/{id}`          | **200** — works normally (no Users call needed) |
+| `PATCH /core/core-items/{id}/status` | **200** — works normally                        |
+| `GET /users/{id}`                    | **503** — gateway cannot reach Users Service    |
+| `POST /users`                        | **503** — gateway cannot reach Users Service    |
 
 Core Service returns 503 on order creation because it cannot validate `owner_user_id` via `GET http://users-service:8080/users/{id}`.
 ```bash
 docker compose start users-service
 ```
+
+### Responsibility split
+
+- **Student Kseniia Hanziuk:** Core Service, Users Service, domain/application/infrastructure layers
+- **Student Sofiia Churikova:** Gateway service, docker-compose.yml (microservice setup), Dockerfile fixes, README
