@@ -33,12 +33,6 @@ Core DB                    Users DB
 - Users Service does **not** write to Core DB
 - Services communicate only via HTTP
 
-## Tech stack
-
-- Python 3.12, FastAPI, SQLAlchemy, Alembic, PostgreSQL
-- Gateway: FastAPI reverse proxy with `httpx`
-- Docker, Docker Compose
-
 ## How to run
 ```bash
 docker compose up --build
