@@ -84,6 +84,10 @@ async def proxy_core(request: Request, path: str):
     target_url = f"{CORE_SERVICE_URL}/{path}"
     return await _proxy(request, target_url)
 
+@app.api_route("/users", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_users_root(request: Request):
+    target_url = f"{USERS_SERVICE_URL}/users"
+    return await _proxy(request, target_url)
 
 @app.api_route("/users/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_users(request: Request, path: str):
