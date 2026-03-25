@@ -57,6 +57,21 @@ services:
       timeout: 5s
       retries: 5
 
+  workflow-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: workflow_db
+    ports:
+      - "5436:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   core-service:
     build:
       context: ./services/core_service
@@ -132,3 +147,24 @@ services:
         condition: service_healthy
       users-service:
         condition: service_healthy
+
+  workflow-service:
+    build:
+      context: ./services/workflow_service
+    restart: unless-stopped
+    ports:
+      - "8084:8080"
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@workflow-db:5432/workflow_db
+      CORE_SERVICE_URL: http://core-service:8080
+    depends_on:
+      workflow-db:
+        condition: service_healthy
+      core-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\"" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
