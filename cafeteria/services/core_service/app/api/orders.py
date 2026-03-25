@@ -2,7 +2,7 @@ import logging
 import os
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -42,9 +42,10 @@ class OrderResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-def get_service(db: Session = Depends(get_db)) -> OrderService:
+def get_service(request: Request, db: Session = Depends(get_db)) -> OrderService:
     repo = PostgresOrderRepository(db)
-    return OrderService(repo, users_base_url=USERS_BASE_URL)
+    correlation_id = getattr(request.state, "correlation_id", "")
+    return OrderService(repo, users_base_url=USERS_BASE_URL, correlation_id=correlation_id)
 
 
 def _to_response(order) -> OrderResponse:

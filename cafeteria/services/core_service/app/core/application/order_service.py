@@ -1,4 +1,5 @@
 import logging
+import uuid
 from uuid import UUID
 from typing import Optional
 
@@ -6,6 +7,8 @@ import httpx
 
 from app.core.application.interfaces import OrderRepository
 from app.core.domain import Order, OrderStatus
+from app.core.domain.events import CoreItemCreatedEvent
+from app.core.infrastructure.publisher import publish_event_sync
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +24,15 @@ class UsersServiceUnavailable(Exception):
 
 
 class OrderService:
-    def __init__(self, repository: OrderRepository, users_base_url: str = ""):
+    def __init__(
+        self,
+        repository: OrderRepository,
+        users_base_url: str = "",
+        correlation_id: str = "",
+    ):
         self.repository = repository
         self.users_base_url = users_base_url.rstrip("/")
+        self.correlation_id = correlation_id or str(uuid.uuid4())
 
     def _validate_user(self, owner_user_id: UUID) -> None:
         if not self.users_base_url:
@@ -59,6 +68,15 @@ class OrderService:
             owner_user_id=owner_user_id,
         )
         self.repository.save(order)
+
+        event = CoreItemCreatedEvent(
+            correlation_id=self.correlation_id,
+            core_item_id=order.id,
+            owner_user_id=order.owner_user_id,
+            summary=f"Order '{order.item_name}' x{order.quantity} by {order.customer_name}",
+        )
+        publish_event_sync(event.model_dump())
+
         return order
 
     def get_order(self, order_id: UUID) -> Optional[Order]:

@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Cafeteria — Gateway")
+app = FastAPI(title="Cafeteria — Gateway", redirect_slashes=False)
 
 CORE_SERVICE_URL = os.getenv("CORE_SERVICE_URL", "http://core-service:8080")
 USERS_SERVICE_URL = os.getenv("USERS_SERVICE_URL", "http://users-service:8080")
@@ -82,6 +82,12 @@ async def _proxy(request: Request, target_url: str) -> Response:
 @app.api_route("/core/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_core(request: Request, path: str):
     target_url = f"{CORE_SERVICE_URL}/{path}"
+    return await _proxy(request, target_url)
+
+
+@app.api_route("/users", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_users_root(request: Request):
+    target_url = f"{USERS_SERVICE_URL}/users"
     return await _proxy(request, target_url)
 
 
