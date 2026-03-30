@@ -3,11 +3,13 @@
 ## Overview
 
 **Workflow:** Place Order saga
+
 - Step 1: Create order in core-service
 - Step 2: Confirm order (change status to pending)
 - Compensation: If Step 2 fails → cancel the created order
 
 **Services:**
+
 - **core-service** — orders management (CRUD + status transitions)
 - **users-service** — user management
 - **notification-service** — listens to RabbitMQ events, stores notifications
@@ -15,6 +17,7 @@
 - **gateway** — API gateway, proxies requests to all services
 
 **Infrastructure:**
+
 - PostgreSQL per service (4 databases)
 - RabbitMQ for async messaging
 - Kubernetes with Ingress
@@ -143,14 +146,14 @@ State transitions: `started` → `order_created` → `order_confirmed` → `comp
 
 ### Failure Path (Compensation)
 
-The compensation path triggers when Step 2 (confirm order) fails. The workflow service catches the error, sets state to `compensating`, and sends a cancel request to core-service to undo the created order.
+The compensation path triggers when Step 2 (confirm order) fails. The workflow service catches the error, sets state to
+`compensating`, and sends a cancel request to core-service to undo the created order.
 
 State transitions on failure: `started` → `order_created` → `compensating` → `cancelled`
 
 If compensation also fails: `started` → `order_created` → `compensating` → `failed`
 
 The `last_error` field stores the failure reason.
-
 
 ```bash
 # Create an order directly
@@ -189,24 +192,25 @@ curl -s http://localhost:8080/users/00000000-0000-0000-0000-000000000000
 
 All manifests are in the `k8s/` folder:
 
-| File | Resources |
-|------|-----------|
-| `namespace.yaml` | Namespace `cafeteria` |
-| `configmap.yaml` | ConfigMap with service URLs, DB hosts/names |
-| `secrets.yaml` | Secret with DB and RabbitMQ credentials |
-| `rabbitmq.yaml` | RabbitMQ ConfigMap + Deployment + Service |
-| `core-db.yaml` | PostgreSQL StatefulSet + PVC + headless Service |
-| `users-db.yaml` | PostgreSQL StatefulSet + PVC + headless Service |
-| `notification-db.yaml` | PostgreSQL StatefulSet + PVC + headless Service |
-| `workflow-db.yaml` | PostgreSQL StatefulSet + PVC + headless Service |
-| `core-service.yaml` | Deployment + Service |
-| `users-service.yaml` | Deployment + Service |
-| `notification-service.yaml` | Deployment + Service |
-| `workflow-service.yaml` | Deployment + Service |
-| `gateway.yaml` | Deployment + Service (ClusterIP) |
-| `ingress.yaml` | Ingress (nginx, host: cafeteria.local) |
+| File                        | Resources                                       |
+|-----------------------------|-------------------------------------------------|
+| `namespace.yaml`            | Namespace `cafeteria`                           |
+| `configmap.yaml`            | ConfigMap with service URLs, DB hosts/names     |
+| `secrets.yaml`              | Secret with DB and RabbitMQ credentials         |
+| `rabbitmq.yaml`             | RabbitMQ ConfigMap + Deployment + Service       |
+| `core-db.yaml`              | PostgreSQL StatefulSet + PVC + headless Service |
+| `users-db.yaml`             | PostgreSQL StatefulSet + PVC + headless Service |
+| `notification-db.yaml`      | PostgreSQL StatefulSet + PVC + headless Service |
+| `workflow-db.yaml`          | PostgreSQL StatefulSet + PVC + headless Service |
+| `core-service.yaml`         | Deployment + Service                            |
+| `users-service.yaml`        | Deployment + Service                            |
+| `notification-service.yaml` | Deployment + Service                            |
+| `workflow-service.yaml`     | Deployment + Service                            |
+| `gateway.yaml`              | Deployment + Service (ClusterIP)                |
+| `ingress.yaml`              | Ingress (nginx, host: cafeteria.local)          |
 
 Each Deployment includes:
+
 - Environment variables via ConfigMap + Secret
 - Readiness probe
 - Liveness probe
@@ -229,19 +233,25 @@ kubectl delete namespace cafeteria
 
 ## Workflow Service API
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/workflows/place-order` | Start place-order saga |
-| GET | `/workflows/{workflowId}` | Get workflow status |
+| Method | Endpoint                  | Description            |
+|--------|---------------------------|------------------------|
+| POST   | `/workflows/place-order`  | Start place-order saga |
+| GET    | `/workflows/{workflowId}` | Get workflow status    |
 
 ### workflow_instances table
 
-| Column | Type | Description |
-|--------|------|-------------|
-| workflow_id | UUID | Primary key |
-| type | String | Workflow type (e.g. "place-order") |
-| state | Enum | Current state |
-| payload | JSON | Request data + order_id |
-| created_at | DateTime | Creation timestamp |
-| updated_at | DateTime | Last update timestamp |
-| last_error | Text | Error message (null on success) |
+| Column      | Type     | Description                        |
+|-------------|----------|------------------------------------|
+| workflow_id | UUID     | Primary key                        |
+| type        | String   | Workflow type (e.g. "place-order") |
+| state       | Enum     | Current state                      |
+| payload     | JSON     | Request data + order_id            |
+| created_at  | DateTime | Creation timestamp                 |
+| updated_at  | DateTime | Last update timestamp              |
+| last_error  | Text     | Error message (null on success)    |
+
+## Team
+
+**Kseniia Hanziuk** — Workflow saga logic, state persistence, compensation path
+
+**Sofiia Churikova** — Kubernetes manifests, deployment configuration, troubleshooting
