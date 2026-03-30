@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: cafeteria
+data:
+  CORE_DB_HOST: "core-db"
+  CORE_DB_NAME: "core_db"
+  USERS_DB_HOST: "users-db"
+  USERS_DB_NAME: "users_db"
+  NOTIFICATION_DB_HOST: "notification-db"
+  NOTIFICATION_DB_NAME: "notification_db"
+  WORKFLOW_DB_HOST: "workflow-db"
+  WORKFLOW_DB_NAME: "workflow_db"
+  CORE_SERVICE_URL: "http://core-service:8080"
+  USERS_SERVICE_URL: "http://users-service:8080"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:8080"
+  WORKFLOW_SERVICE_URL: "http://workflow-service:8080"
+  RABBITMQ_HOST: "rabbitmq"

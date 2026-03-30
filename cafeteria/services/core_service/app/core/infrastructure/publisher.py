@@ -7,9 +7,22 @@ import aio_pika
 
 logger = logging.getLogger(__name__)
 
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 EXCHANGE_NAME = "core"
 ROUTING_KEY = "core-item.created"
+
+
+def build_rabbitmq_url() -> str:
+    explicit_url = os.getenv("RABBITMQ_URL")
+    if explicit_url:
+        return explicit_url
+
+    host = os.getenv("RABBITMQ_HOST", "localhost")
+    user = os.getenv("RABBITMQ_USER", "guest")
+    password = os.getenv("RABBITMQ_PASSWORD", "guest")
+    return f"amqp://{user}:{password}@{host}:5672/"
+
+
+RABBITMQ_URL = build_rabbitmq_url()
 
 
 async def _publish(event_dict: dict) -> None:

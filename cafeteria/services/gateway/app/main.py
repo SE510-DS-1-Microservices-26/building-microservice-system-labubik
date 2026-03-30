@@ -15,6 +15,7 @@ app = FastAPI(title="Cafeteria — Gateway", redirect_slashes=False)
 
 CORE_SERVICE_URL = os.getenv("CORE_SERVICE_URL", "http://core-service:8080")
 USERS_SERVICE_URL = os.getenv("USERS_SERVICE_URL", "http://users-service:8080")
+WORKFLOW_SERVICE_URL = os.getenv("WORKFLOW_SERVICE_URL", "http://workflow-service:8080")
 
 
 @app.middleware("http")
@@ -94,6 +95,12 @@ async def proxy_users_root(request: Request):
 @app.api_route("/users/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_users(request: Request, path: str):
     target_url = f"{USERS_SERVICE_URL}/users/{path}"
+    return await _proxy(request, target_url)
+
+
+@app.api_route("/workflows/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+async def proxy_workflows(request: Request, path: str):
+    target_url = f"{WORKFLOW_SERVICE_URL}/workflows/{path}"
     return await _proxy(request, target_url)
 
 
