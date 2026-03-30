@@ -40,7 +40,7 @@ def upgrade() -> None:
         sa.Column("type", sa.String(), nullable=False),
         sa.Column(
             "state",
-            sa.Enum(
+            postgresql.ENUM(
                 "started",
                 "order_created",
                 "order_confirmed",

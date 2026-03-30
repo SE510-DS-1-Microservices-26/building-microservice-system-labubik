@@ -1,5 +1,4 @@
-import os
-from app.core.infrastructure.database import Base
+from app.core.infrastructure.database import Base, build_database_url
 import app.core.infrastructure.user_repository  # noqa
 
 from logging.config import fileConfig
@@ -15,9 +14,7 @@ config = context.config
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-database_url = os.getenv("DATABASE_URL")
-if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+config.set_main_option("sqlalchemy.url", build_database_url())
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
