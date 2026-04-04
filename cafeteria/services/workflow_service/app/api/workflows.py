@@ -2,7 +2,7 @@ import logging
 import os
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -33,9 +33,14 @@ class WorkflowResponse(BaseModel):
     last_error: str | None = None
 
 
-def get_service(db: Session = Depends(get_db)) -> WorkflowService:
+def get_service(request: Request, db: Session = Depends(get_db)) -> WorkflowService:
     repo = PostgresWorkflowRepository(db)
-    return WorkflowService(repo, core_service_url=CORE_SERVICE_URL)
+    correlation_id = getattr(request.state, "correlation_id", "")
+    return WorkflowService(
+        repo,
+        core_service_url=CORE_SERVICE_URL,
+        correlation_id=correlation_id,
+    )
 
 
 def _to_response(wf) -> WorkflowResponse:
@@ -50,19 +55,11 @@ def _to_response(wf) -> WorkflowResponse:
     )
 
 
-
 @router.post("/workflows/place-order", response_model=WorkflowResponse, status_code=201)
 def start_place_order(
-    body: PlaceOrderRequest,
-    service: WorkflowService = Depends(get_service),
+        body: PlaceOrderRequest,
+        service: WorkflowService = Depends(get_service),
 ):
-    """
-    Start the 'place-order' saga.
-
-    Happy path:   STARTED → ORDER_CREATED → ORDER_CONFIRMED → COMPLETED
-    Failure path: STARTED → ORDER_CREATED → COMPENSATING → CANCELLED
-                                                          → FAILED (if compensation also fails)
-    """
     logger.info("Starting place-order workflow for customer: %s", body.customer_name)
     wf = service.start_place_order(body.model_dump())
     return _to_response(wf)
@@ -70,8 +67,8 @@ def start_place_order(
 
 @router.get("/workflows/{workflow_id}", response_model=WorkflowResponse)
 def get_workflow(
-    workflow_id: UUID,
-    service: WorkflowService = Depends(get_service),
+        workflow_id: UUID,
+        service: WorkflowService = Depends(get_service),
 ):
     wf = service.get_workflow(workflow_id)
     if wf is None:

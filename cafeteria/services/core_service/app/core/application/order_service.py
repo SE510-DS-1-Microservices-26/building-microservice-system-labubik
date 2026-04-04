@@ -28,7 +28,7 @@ class OrderService:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_fixed(1),
-        retry=retry_if_exception_type(httpx.TransientError),
+        retry=retry_if_exception_type(httpx.TransportError),
         reraise=True,
     )
     def _validate_user(self, user_id: UUID) -> None:
@@ -49,6 +49,14 @@ class OrderService:
                 user_id,
                 extra={"correlation_id": self.correlation_id},
             )
+        except httpx.ConnectError as exc:
+            logger.error(
+                "Cannot connect to users-service for user %s: %s",
+                user_id,
+                exc,
+                extra={"correlation_id": self.correlation_id},
+            )
+            raise UsersServiceUnavailable("Users service unavailable") from exc
         except httpx.TimeoutException as exc:
             logger.error(
                 "Timeout validating user %s: %s",
@@ -67,12 +75,12 @@ class OrderService:
             raise UsersServiceUnavailable("Users service unavailable") from exc
 
     def create_order(
-        self,
-        customer_name: str,
-        item_name: str,
-        quantity: int,
-        price: float,
-        owner_user_id: UUID,
+            self,
+            customer_name: str,
+            item_name: str,
+            quantity: int,
+            price: float,
+            owner_user_id: UUID,
     ) -> Order:
         self._validate_user(owner_user_id)
         order = Order(

@@ -1,257 +1,77 @@
-# Practice 7 — Workflow / Saga + Kubernetes Deployment
+## Practice 8 — Production Hardening
 
-## Overview
+#### Correlation ID
 
-**Workflow:** Place Order saga
+We added correlation ID propagation across all services. The idea is simple — every request that enters the system gets a unique `X-Correlation-Id` header. If the client already sends one, we reuse it. If not, the middleware generates a new UUID.
 
-- Step 1: Create order in core-service
-- Step 2: Confirm order (change status to pending)
-- Compensation: If Step 2 fails → cancel the created order
+This correlation ID travels through the whole system:
+- Gateway reads/generates it and forwards to downstream services
+- Each service (core, users, workflow, notification) has a middleware that picks it up and logs it
+- When services talk to each other via HTTP, they pass it in headers
+- When publishing messages to RabbitMQ, the correlation ID goes into message headers too
+- The consumer on the notification-service side reads it back
 
-**Services:**
+#### Resiliency
 
-- **core-service** — orders management (CRUD + status transitions)
-- **users-service** — user management
-- **notification-service** — listens to RabbitMQ events, stores notifications
-- **workflow-service** — saga orchestrator, persists workflow state
-- **gateway** — API gateway, proxies requests to all services
+All inter-service HTTP calls now have timeouts and retries configured:
+- Timeout is set to 5 seconds on all httpx calls
+- Retry is done via `tenacity` — up to 3 attempts with 1 second wait, only retries on transient network errors
+- If a downstream service is unavailable, we return 503
 
-**Infrastructure:**
+This covers:
+- core-service calling users-service for user validation
+- workflow-service calling core-service for order creation/confirmation
+- gateway proxying requests to all services (10s timeout, 503 on failure)
 
-- PostgreSQL per service (4 databases)
-- RabbitMQ for async messaging
-- Kubernetes with Ingress
+#### Kubernetes Scaling
 
-## Prerequisites
+We scaled core-service to 3 replicas and added explicit `RollingUpdate` strategy to all deployments.
 
-- Docker Desktop with Kubernetes enabled
-- `kubectl` configured to use `docker-desktop` context
+For core-service we set `maxUnavailable: 1` and `maxSurge: 1`, so during updates at least 2 out of 3 pods are always available. For other services (1 replica each) we use `maxUnavailable: 0` and `maxSurge: 1` — Kubernetes spins up a new pod first before killing the old one.
 
+All deployments already had readiness/liveness probes and resource limits from Practice 7.
+
+### How to verify
+
+Scale:
 ```bash
-kubectl config use-context docker-desktop
+kubectl get pods -l app=core-service -n cafeteria
+# should show 3 pods
 ```
 
-## Build & Deploy
-
-### 1. Build Docker images
-
+Correlation ID:
 ```bash
-docker-compose build
+curl -v -H "X-Correlation-Id: my-test-id" \
+  http://localhost:8080/core/core-items
+
+# check that response has X-Correlation-Id: my-test-id
+kubectl logs -l app=core-service -n cafeteria | grep "my-test-id"
 ```
 
-### 2. Tag images for Kubernetes
-
+Rolling update and rollback:
 ```bash
-docker tag cafeteria-core-service:latest cafeteria/core-service:latest
-docker tag cafeteria-users-service:latest cafeteria/users-service:latest
-docker tag cafeteria-notification-service:latest cafeteria/notification-service:latest
-docker tag cafeteria-workflow-service:latest cafeteria/workflow-service:latest
-docker tag cafeteria-gateway:latest cafeteria/gateway:latest
+kubectl set image deployment/core-service core-service=cafeteria/core-service:v2 -n cafeteria
+kubectl rollout status deployment/core-service -n cafeteria
+kubectl rollout undo deployment/core-service -n cafeteria
 ```
 
-### 3. Deploy to Kubernetes
-
+Multiple pods serving traffic:
 ```bash
-kubectl apply -f k8s/namespace.yaml 
-kubectl apply -f k8s/
+kubectl logs -l app=core-service -n cafeteria --prefix | head -20
 ```
 
-### 4. Verify pods are running
+### Resource limits
 
-Wait 2-3 minutes for all pods to start:
+| Service              | CPU req | CPU limit | Mem req | Mem limit |
+|----------------------|---------|-----------|---------|-----------|
+| core-service         | 100m    | 300m      | 128Mi   | 256Mi     |
+| users-service        | 100m    | 300m      | 128Mi   | 256Mi     |
+| notification-service | 100m    | 300m      | 128Mi   | 256Mi     |
+| workflow-service     | 100m    | 300m      | 128Mi   | 256Mi     |
+| gateway              | 50m     | 200m      | 64Mi    | 128Mi     |
 
-```bash
-kubectl get pods -n cafeteria
-```
+### Team
 
-Expected output — all pods `1/1 Running`:
+**Kseniia Hanziuk** — Correlation ID middleware and propagation in gateway and core-service, resiliency policies for core-service, RabbitMQ correlation ID
 
-```
-NAME                                    READY   STATUS    AGE
-core-db-0                               1/1     Running   ..m
-core-service-...                        1/1     Running   ..m
-gateway-...                             1/1     Running   ..m
-notification-db-0                       1/1     Running   ..m
-notification-service-...                1/1     Running   ..m
-rabbitmq-...                            1/1     Running   ..m
-users-db-0                              1/1     Running   ..m
-users-service-...                       1/1     Running   ..m
-workflow-db-0                           1/1     Running   ..m
-workflow-service-...                    1/1     Running   ..m
-```
-
-Note: application services may restart 2-3 times while waiting for databases to become ready. This is expected behavior.
-
-### 5. Verify services
-
-```bash
-kubectl get svc -n cafeteria
-```
-
-## How to Reach Gateway
-
-Port-forward the gateway service:
-
-```bash
-kubectl port-forward svc/gateway 8080:8080 -n cafeteria
-```
-
-Gateway is now accessible at `http://localhost:8080`.
-
-Health check:
-
-```bash
-curl http://localhost:8080/health
-```
-
-## How to Verify Workflow
-
-### Success Path
-
-```bash
-# 1. Create a user
-curl -s -X POST http://localhost:8080/users \
-  -H "Content-Type: application/json" \
-  -d '{"display_name": "Sofiia"}'
-# Save the returned "id" as USER_ID
-
-# 2. Start place-order workflow
-curl -s -X POST http://localhost:8080/workflows/place-order \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customer_name": "Sofiia",
-    "item_name": "Salad",
-    "quantity": 1,
-    "price": 120.0,
-    "owner_user_id": "<USER_ID>"
-  }'
-# Save the returned "workflow_id" as WORKFLOW_ID
-
-# 3. Check workflow status
-curl -s http://localhost:8080/workflows/<WORKFLOW_ID>
-```
-
-Expected result for success path:
-
-```json
-{
-  "workflow_id": "...",
-  "type": "place-order",
-  "state": "completed",
-  "last_error": null
-}
-```
-
-State transitions: `started` → `order_created` → `order_confirmed` → `completed`
-
-### Failure Path (Compensation)
-
-The compensation path triggers when Step 2 (confirm order) fails. The workflow service catches the error, sets state to
-`compensating`, and sends a cancel request to core-service to undo the created order.
-
-State transitions on failure: `started` → `order_created` → `compensating` → `cancelled`
-
-If compensation also fails: `started` → `order_created` → `compensating` → `failed`
-
-The `last_error` field stores the failure reason.
-
-```bash
-# Create an order directly
-curl -s -X POST http://localhost:8080/core/core-items \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customer_name": "Sofiia",
-    "item_name": "Pizza",
-    "quantity": 2,
-    "price": 150.0,
-    "owner_user_id": "<USER_ID>"
-  }'
-
-# Get order by id
-curl -s http://localhost:8080/core/core-items/<ORDER_ID>
-
-# Update order status
-curl -s -X PATCH http://localhost:8080/core/core-items/<ORDER_ID>/status \
-  -H "Content-Type: application/json" \
-  -d '{"status": "pending"}'
-
-# Get user by id
-curl -s http://localhost:8080/users/<USER_ID>
-
-# Validation error (returns 422)
-curl -s -X POST http://localhost:8080/core/core-items \
-  -H "Content-Type: application/json" \
-  -d '{"customer_name": "", "item_name": "Pizza", "quantity": 0, "price": -10.0, "owner_user_id": "<USER_ID>"}'
-
-# Not found (returns 404)
-curl -s http://localhost:8080/workflows/00000000-0000-0000-0000-000000000000
-curl -s http://localhost:8080/users/00000000-0000-0000-0000-000000000000
-```
-
-## Kubernetes Manifests
-
-All manifests are in the `k8s/` folder:
-
-| File                        | Resources                                       |
-|-----------------------------|-------------------------------------------------|
-| `namespace.yaml`            | Namespace `cafeteria`                           |
-| `configmap.yaml`            | ConfigMap with service URLs, DB hosts/names     |
-| `secrets.yaml`              | Secret with DB and RabbitMQ credentials         |
-| `rabbitmq.yaml`             | RabbitMQ ConfigMap + Deployment + Service       |
-| `core-db.yaml`              | PostgreSQL StatefulSet + PVC + headless Service |
-| `users-db.yaml`             | PostgreSQL StatefulSet + PVC + headless Service |
-| `notification-db.yaml`      | PostgreSQL StatefulSet + PVC + headless Service |
-| `workflow-db.yaml`          | PostgreSQL StatefulSet + PVC + headless Service |
-| `core-service.yaml`         | Deployment + Service                            |
-| `users-service.yaml`        | Deployment + Service                            |
-| `notification-service.yaml` | Deployment + Service                            |
-| `workflow-service.yaml`     | Deployment + Service                            |
-| `gateway.yaml`              | Deployment + Service (ClusterIP)                |
-| `ingress.yaml`              | Ingress (nginx, host: cafeteria.local)          |
-
-Each Deployment includes:
-
-- Environment variables via ConfigMap + Secret
-- Readiness probe
-- Liveness probe
-- Resource requests and limits
-
-Databases use StatefulSets with PersistentVolumeClaims (1Gi each).
-
-## Cleanup
-
-```bash
-kubectl delete -f k8s/ -n cafeteria
-```
-
-To also remove persistent data:
-
-```bash
-kubectl delete pvc --all -n cafeteria
-kubectl delete namespace cafeteria
-```
-
-## Workflow Service API
-
-| Method | Endpoint                  | Description            |
-|--------|---------------------------|------------------------|
-| POST   | `/workflows/place-order`  | Start place-order saga |
-| GET    | `/workflows/{workflowId}` | Get workflow status    |
-
-### workflow_instances table
-
-| Column      | Type     | Description                        |
-|-------------|----------|------------------------------------|
-| workflow_id | UUID     | Primary key                        |
-| type        | String   | Workflow type (e.g. "place-order") |
-| state       | Enum     | Current state                      |
-| payload     | JSON     | Request data + order_id            |
-| created_at  | DateTime | Creation timestamp                 |
-| updated_at  | DateTime | Last update timestamp              |
-| last_error  | Text     | Error message (null on success)    |
-
-## Team
-
-**Kseniia Hanziuk** — Workflow saga logic, state persistence, compensation path
-
-**Sofiia Churikova** — Kubernetes manifests, deployment configuration, troubleshooting
+**Sofiia Churikova** — Kubernetes scaling and RollingUpdate strategy, correlation ID middleware for remaining services, resiliency for workflow-service
