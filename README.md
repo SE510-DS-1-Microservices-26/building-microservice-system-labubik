@@ -136,4 +136,4 @@ Expected output:
 ## Responsibility split
 
 - **Kseniia Hanziuk:** Event contract, publisher, event publishing in Core Service
-- **Sofiia Churikova:** Notification Service, README
+- **Sofiia Churikova:** Notification Service
