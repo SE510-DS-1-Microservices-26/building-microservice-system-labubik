@@ -1,5 +1,5 @@
 from app.core.infrastructure.database import Base, build_database_url
-import app.core.infrastructure.user_repository  # noqa
+import app.core.infrastructure.workflow_repository  # noqa – registers the model
 
 from logging.config import fileConfig
 

@@ -3,7 +3,7 @@ import uuid
 
 from fastapi import FastAPI, Request
 
-from app.api.orders import router as order_router
+from app.api.workflows import router as workflow_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -11,7 +11,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Cafeteria — Core Service")
+app = FastAPI(title="Cafeteria — Workflow Service")
 
 
 @app.middleware("http")
@@ -34,9 +34,9 @@ async def correlation_id_middleware(request: Request, call_next):
     return response
 
 
-app.include_router(order_router)
+app.include_router(workflow_router)
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "core"}
+    return {"status": "ok", "service": "workflow"}

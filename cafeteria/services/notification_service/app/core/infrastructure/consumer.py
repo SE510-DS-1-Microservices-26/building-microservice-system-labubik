@@ -14,17 +14,41 @@ from app.core.infrastructure.notification_repository import PostgresNotification
 
 logger = logging.getLogger(__name__)
 
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 EXCHANGE_NAME = "core"
 ROUTING_KEY = "core-item.created"
 QUEUE_NAME = "notification.core-item.created"
+
+
+def build_rabbitmq_url() -> str:
+    explicit_url = os.getenv("RABBITMQ_URL")
+    if explicit_url:
+        return explicit_url
+
+    host = os.getenv("RABBITMQ_HOST", "localhost")
+    user = os.getenv("RABBITMQ_USER", "guest")
+    password = os.getenv("RABBITMQ_PASSWORD", "guest")
+    return f"amqp://{user}:{password}@{host}:5672/"
+
+
+RABBITMQ_URL = build_rabbitmq_url()
 
 
 async def process_message(message: aio_pika.IncomingMessage) -> None:
     async with message.process(requeue=False):
         try:
             body = json.loads(message.body.decode())
-            logger.info("Received event_id=%s", body.get("event_id"))
+
+            headers = message.headers or {}
+            correlation_id = (
+                headers.get("correlation_id")
+                or body.get("correlation_id", "")
+            )
+
+            logger.info(
+                "Received event_id=%s correlation_id=%s",
+                body.get("event_id"),
+                correlation_id,
+            )
 
             Session = sessionmaker(bind=engine, autocommit=False)
             with Session() as db:
@@ -33,7 +57,7 @@ async def process_message(message: aio_pika.IncomingMessage) -> None:
 
                 notification = Notification(
                     event_id=body["event_id"],
-                    correlation_id=body.get("correlation_id", ""),
+                    correlation_id=correlation_id,
                     core_item_id=body["core_item_id"],
                     owner_user_id=body["owner_user_id"],
                     summary=body.get("summary", ""),
