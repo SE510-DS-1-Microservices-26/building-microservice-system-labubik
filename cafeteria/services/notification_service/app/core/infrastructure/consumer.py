@@ -37,7 +37,18 @@ async def process_message(message: aio_pika.IncomingMessage) -> None:
     async with message.process(requeue=False):
         try:
             body = json.loads(message.body.decode())
-            logger.info("Received event_id=%s", body.get("event_id"))
+
+            headers = message.headers or {}
+            correlation_id = (
+                headers.get("correlation_id")
+                or body.get("correlation_id", "")
+            )
+
+            logger.info(
+                "Received event_id=%s correlation_id=%s",
+                body.get("event_id"),
+                correlation_id,
+            )
 
             Session = sessionmaker(bind=engine, autocommit=False)
             with Session() as db:
@@ -46,7 +57,7 @@ async def process_message(message: aio_pika.IncomingMessage) -> None:
 
                 notification = Notification(
                     event_id=body["event_id"],
-                    correlation_id=body.get("correlation_id", ""),
+                    correlation_id=correlation_id,
                     core_item_id=body["core_item_id"],
                     owner_user_id=body["owner_user_id"],
                     summary=body.get("summary", ""),

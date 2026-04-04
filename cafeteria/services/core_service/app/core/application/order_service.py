@@ -1,55 +1,70 @@
 import logging
-import uuid
 from uuid import UUID
 from typing import Optional
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
 
 from app.core.application.interfaces import OrderRepository
 from app.core.domain import Order, OrderStatus
-from app.core.domain.events import CoreItemCreatedEvent
-from app.core.infrastructure.publisher import publish_event_sync
 
 logger = logging.getLogger(__name__)
 
 
 class UserValidationError(Exception):
-    """Raised when the owner user does not exist (404 from Users service)."""
     pass
 
 
 class UsersServiceUnavailable(Exception):
-    """Raised when the Users service is unreachable or times out."""
     pass
 
 
 class OrderService:
-    def __init__(
-        self,
-        repository: OrderRepository,
-        users_base_url: str = "",
-        correlation_id: str = "",
-    ):
+    def __init__(self, repository: OrderRepository, users_base_url: str = "", correlation_id: str = ""):
         self.repository = repository
-        self.users_base_url = users_base_url.rstrip("/")
-        self.correlation_id = correlation_id or str(uuid.uuid4())
+        self.users_base_url = users_base_url
+        self.correlation_id = correlation_id
 
-    def _validate_user(self, owner_user_id: UUID) -> None:
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(1),
+        retry=retry_if_exception_type(httpx.TransientError),
+        reraise=True,
+    )
+    def _validate_user(self, user_id: UUID) -> None:
         if not self.users_base_url:
             return
-        url = f"{self.users_base_url}/users/{owner_user_id}"
+        headers = {"X-Correlation-Id": self.correlation_id}
         try:
-            response = httpx.get(url, timeout=5.0)
-        except (httpx.TimeoutException, httpx.ConnectError) as exc:
-            logger.error("Users service unreachable: %s", exc)
-            raise UsersServiceUnavailable("Users service is unavailable") from exc
-        if response.status_code == 404:
-            raise UserValidationError(f"User {owner_user_id} does not exist")
-        if response.status_code != 200:
-            logger.error("Unexpected response from Users service: %s", response.status_code)
-            raise UsersServiceUnavailable(
-                f"Users service returned unexpected status {response.status_code}"
+            with httpx.Client(timeout=5.0) as client:
+                response = client.get(
+                    f"{self.users_base_url}/users/{user_id}",
+                    headers=headers,
+                )
+            if response.status_code == 404:
+                raise UserValidationError(f"User {user_id} not found")
+            response.raise_for_status()
+            logger.info(
+                "User %s validated",
+                user_id,
+                extra={"correlation_id": self.correlation_id},
             )
+        except httpx.TimeoutException as exc:
+            logger.error(
+                "Timeout validating user %s: %s",
+                user_id,
+                exc,
+                extra={"correlation_id": self.correlation_id},
+            )
+            raise UsersServiceUnavailable("Users service timed out") from exc
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "HTTP error validating user %s: %s",
+                user_id,
+                exc,
+                extra={"correlation_id": self.correlation_id},
+            )
+            raise UsersServiceUnavailable("Users service unavailable") from exc
 
     def create_order(
         self,
@@ -68,15 +83,12 @@ class OrderService:
             owner_user_id=owner_user_id,
         )
         self.repository.save(order)
-
-        event = CoreItemCreatedEvent(
-            correlation_id=self.correlation_id,
-            core_item_id=order.id,
-            owner_user_id=order.owner_user_id,
-            summary=f"Order '{order.item_name}' x{order.quantity} by {order.customer_name}",
+        logger.info(
+            "Order %s created for customer %s",
+            order.id,
+            customer_name,
+            extra={"correlation_id": self.correlation_id},
         )
-        publish_event_sync(event.model_dump())
-
         return order
 
     def get_order(self, order_id: UUID) -> Optional[Order]:
@@ -88,4 +100,10 @@ class OrderService:
             raise ValueError(f"Order {order_id} was not found!")
         order.change_status(new_status)
         self.repository.save(order)
+        logger.info(
+            "Order %s status updated to %s",
+            order_id,
+            new_status,
+            extra={"correlation_id": self.correlation_id},
+        )
         return order
